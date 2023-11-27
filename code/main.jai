@@ -1150,6 +1150,7 @@ main :: () {
     body_yaw := 0.0;
 
     player_pos : Vector3;
+    player_yaw : float;
     input_state : OVR_Input_State;
     delta_time : float32;
     last_frame : float32;
@@ -1189,25 +1190,62 @@ main :: () {
         camera_speed := 2 * delta_time;
 
         // Player movement
+        /*
         rotation := rotation_matrix(Matrix3, eye_render_poses[OVR_Eye_Type.OVR_EYE_LEFT].orientation);
-        final_up := rotation * .{0, 1, 0};
-        final_forward := rotation * .{0, 0, -1};
+
+        q2 : Quaternion;
+        set_from_axis_and_angle(*q2, 0.0, 1.0, 0.0, -player_yaw);
+        final_up := rotate(rotation * .{0, 1, 0}, q2);
+        final_forward := rotate(rotation * .{0, 0, -1}, q2);
+
+        q2 : Quaternion;
+        set_from_axis_and_angle(*q2, 0.0, 1.0, 0.0, -player_yaw);
+        roll_pitch_yaw := rotation_matrix(Matrix4, q2);
+        final_roll_pitch_yaw := roll_pitch_yaw * rotation_matrix(Matrix4, eye_render_poses[OVR_Eye_Type.OVR_EYE_LEFT].orientation);
+        final_up := matrix4_vector3_transform(final_roll_pitch_yaw, .{0, 1, 0});
+        final_forward := matrix4_vector3_transform(final_roll_pitch_yaw, .{0, 0, -1});*/
+        final_forward, final_up := get_camera_front_up_vectors(eye_render_poses[OVR_Eye_Type.OVR_EYE_LEFT].orientation, player_yaw);
 
         ovr_GetInputState(session, .OVR_CONTROLLER_TYPE_TOUCH, *input_state);
+        // Forwards
         if input_state.thumbstick[OVR_Hand_Type.OVR_HAND_LEFT].y > 0.5 {
             player_pos += camera_speed * final_forward;
+            //player_pos += rotate_vector_by_y_axis(.{0, 0, -0.05}, player_yaw);
         }
+        // Backwards
         if input_state.thumbstick[OVR_Hand_Type.OVR_HAND_LEFT].y < -0.5 {
             player_pos -= camera_speed * final_forward;
+            //player_pos += rotate_vector_by_y_axis(.{0, 0, 0.05}, player_yaw);
         }
+        // Strafe left
         if input_state.thumbstick[OVR_Hand_Type.OVR_HAND_LEFT].x > 0.5 {
             player_pos += normalize_or_z_axis(cross(final_forward, final_up)) * camera_speed;
+            //player_pos += rotate_vector_by_y_axis(.{0.05, 0, 0}, player_yaw);
         }
+        // Strafe right
         if input_state.thumbstick[OVR_Hand_Type.OVR_HAND_LEFT].x < -0.5 {
             player_pos -= normalize_or_z_axis(cross(final_forward, final_up)) * camera_speed;
+            //player_pos += rotate_vector_by_y_axis(.{-0.05, 0, 0}, player_yaw);
         }
         // make sure player's y component doesn't get affected by controller thumbstick
         player_pos.y = 0.0;
+
+        // Snap turns
+        snap_angle := PI / 36;
+        if input_state.thumbstick[OVR_Hand_Type.OVR_HAND_RIGHT].x > 0.5 {
+            player_yaw += snap_angle;
+        }
+        if input_state.thumbstick[OVR_Hand_Type.OVR_HAND_RIGHT].x < -0.5 {
+            player_yaw -= snap_angle;
+        }
+
+        /*
+        if player_yaw > (2 * PI) {
+            player_yaw = snap_angle;
+        }
+        if player_yaw < 0 {
+            player_yaw = (2 * PI) - snap_angle;
+        }*/
 
         result = ovr_WaitToBeginFrame(session, frame_index);
         assert(ovr_success(result), "Failed to wait for frame.");
@@ -1241,24 +1279,36 @@ main :: () {
             glEnable(GL_FRAMEBUFFER_SRGB);
 
             ground_position := Vector3.{};
-            model_transform := make_translation_matrix4(ground_position);
             head_transform := make_translation_matrix4(head_pose.position) * rotation_matrix(Matrix4, head_pose.orientation);
-            eye_transform := rotation_matrix(Matrix4, eye_render_poses[it].orientation);
-
-            global_transform := head_transform * eye_transform;
-            global_rotation := rotation_matrix(Matrix3, head_pose.orientation) * rotation_matrix(Matrix3, eye_render_poses[it].orientation);
-
-            //global_eye_position := (head_transform * make_vector4(eye_render_poses[it].position, 1.0)).xyz;
-            //global_eye_forward := global_rotation * Vector3.{0, 0, -1};
-            //global_eye_up := global_rotation * Vector3.{0, 1, 0};
 
             position := ground_position + eye_render_poses[it].position + player_pos;
+            //x, y, z, theta := get_axis_and_angle(eye_render_poses[it].orientation);
+            //print("eye: %, \n\txyz(%, %, %), theta: %\n", it, x, y, z, theta);
+
+            /*
+            player_direction : Vector3;
+            player_direction.x = cos(player_yaw * cos(0.0));
+            player_direction.z = sin(player_yaw * cos(0.0));
+            player_direction = normalize_or_z_axis(player_direction);
             rotation := rotation_matrix(Matrix3, eye_render_poses[it].orientation);
+            final_up := rotate(rotation * .{0, 1, 0}, q);
+            final_forward := rotate(rotation * .{0, 0, -1}, q);
+            */
+            //look_at_forward := position + final_forward; // rotate_vector_by_y_axis(final_forward, -player_yaw);
+            //rotated_forward_xz := rotate(.{final_forward.x, final_forward.z}, player_yaw);
+            final_forward, final_up := get_camera_front_up_vectors(eye_render_poses[it].orientation, player_yaw);
 
-            final_up := rotation * .{0, 1, 0};
-            final_forward := rotation * .{0, 0, -1};
+            q : Quaternion;
+            set_from_axis_and_angle(*q, 0.0, 1.0, 0.0, -player_yaw);
+            roll_pitch_yaw := rotation_matrix(Matrix4, q);
+            /*
+            final_roll_pitch_yaw := roll_pitch_yaw * rotation_matrix(Matrix4, eye_render_poses[it].orientation);
+            final_up := matrix4_vector3_transform(final_roll_pitch_yaw, .{0, 1, 0});
+            final_forward := matrix4_vector3_transform(final_roll_pitch_yaw, .{0, 0, -1}); */
+            shifted_eye_pos := player_pos + matrix4_vector3_transform(roll_pitch_yaw, eye_render_poses[it].position);
 
-            view:= make_look_at_matrix(position, position + final_forward, final_up, false);
+            //print("eye %: \n\t% = pos: %, forward: %\n", it, position + final_forward, position, final_forward);
+            view := make_look_at_matrix(shifted_eye_pos, shifted_eye_pos + final_forward, final_up, false);
 
             projection := ovrMatrix4f_Projection(desc.default_eye_fov[it], 0.2, 1000.0, .PROJECTION_NONE);
             // make_projection_matrix(deg_to_rad(fov), 1920.0/1080.0, 0.2, 1000);
@@ -1290,20 +1340,13 @@ main :: () {
 
             for hand : hmd_tracking_state.hand_poses {
                 body_pos_in_origin := ifx tracking_origin_type == .OVR_TRACKING_ORIGIN_EYE_LEVEL then body_pos else body_pose_floor_level;
-                position2 := hand.the_pose.position + player_pos;
-                orientation2 := hand.the_pose.orientation;
-                hand_transform := make_translation_matrix4(position2) * rotation_matrix(Matrix4, orientation2);
-                //hand_transform := make_translation_matrix4(position2 + body_pos_in_origin) * rotation_matrix(Matrix4, orientation2);
-                global_hand_position := (hand_transform * head_transform);
+                shifted_hand_position := matrix4_vector3_transform(roll_pitch_yaw, hand.the_pose.position) + player_pos;
+                orientation2 := roll_pitch_yaw * rotation_matrix(Matrix4, hand.the_pose.orientation);
+                hand_transform := make_translation_matrix4(shifted_hand_position) * orientation2;
 
                 scale_factor2 := 0.05;
-                q : Quaternion;
-                set_from_axis_and_angle(*q, 1.0, 0.3, 0.5, deg_to_rad(xx (get_time() * 20)));
-                m_rotate := rotation_matrix(Matrix4, orientation2);
                 glUseProgram(shader);
-
-               // model2 := global_hand_position;// * m_rotate  * make_scale_matrix4(xyz(scale_factor2, scale_factor2, scale_factor2));
-                model2 := hand_transform * m_rotate * make_scale_matrix4(xyz(scale_factor2, scale_factor2, scale_factor2));
+                model2 := hand_transform * make_scale_matrix4(xyz(scale_factor2, scale_factor2, scale_factor2));
                 glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_TRUE, model2.floats.data);
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, texture2);
@@ -1474,6 +1517,35 @@ strlen :: (s: *u8) -> s64 {
 
 deg_to_rad :: (deg: float) -> float {
     return deg * (PI / 180);
+}
+
+rotate_vector_by_y_axis :: (v : Vector3, theta : float) -> Vector3 {
+    m := Matrix4.{ _11 = cos(theta),  _12 = 0, _13 = sin(theta), _14 = 0,
+                   _21 = 0,           _22 = 1, _23 = 0,          _24 = 0,
+                   _31 = -sin(theta), _32 = 0, _33 = cos(theta), _34 = 0,
+                   _41 = 0,           _42 = 0, _43 = 0,          _44 = 1
+                 };
+    return matrix4_vector3_transform(m, v);
+}
+
+get_camera_front_up_vectors :: (eye_render_pose_orientation : Quaternion, theta : float) -> Vector3, Vector3 {
+    q : Quaternion;
+    set_from_axis_and_angle(*q, 0.0, 1.0, 0.0, -theta);
+    roll_pitch_yaw := rotation_matrix(Matrix4, q);
+    final_roll_pitch_yaw := roll_pitch_yaw * rotation_matrix(Matrix4, eye_render_pose_orientation);
+    final_up := matrix4_vector3_transform(final_roll_pitch_yaw, .{0, 1, 0});
+    final_forward := matrix4_vector3_transform(final_roll_pitch_yaw, .{0, 0, -1});
+    return final_forward, final_up;
+}
+
+matrix4_vector3_transform :: (m : Matrix4, v : Vector3) -> Vector3 {
+    // rcpW provides a fourth value to our Vector3 so we can do the multiplcation against a Matrix4*/
+    // aka Homogenous transformation
+    rcpW := 1 / (m._41 * v.x + m._42 * v.y + m._43 * v.z + m._44);
+    return .{ (m._11 * v.x + m._12 * v.y + m._13 * v.z + m._14) * rcpW,
+              (m._21 * v.x + m._22 * v.y + m._23 * v.z + m._24) * rcpW,
+              (m._31 * v.x + m._32 * v.y + m._33 * v.z + m._34) * rcpW
+            };
 }
 
 VERTEX_SHADER :: #string DONE
