@@ -1219,12 +1219,12 @@ main :: () {
         }
         // Strafe left
         if input_state.thumbstick[OVR_Hand_Type.OVR_HAND_LEFT].x > 0.5 {
-            player_pos += normalize_or_z_axis(cross(final_forward, final_up)) * camera_speed;
+            player_pos += normalize(cross(final_forward, final_up), fallback=.{z=1}) * camera_speed;
             //player_pos += rotate_vector_by_y_axis(.{0.05, 0, 0}, player_yaw);
         }
         // Strafe right
         if input_state.thumbstick[OVR_Hand_Type.OVR_HAND_LEFT].x < -0.5 {
-            player_pos -= normalize_or_z_axis(cross(final_forward, final_up)) * camera_speed;
+            player_pos -= normalize(cross(final_forward, final_up), fallback=.{z=1}) * camera_speed;
             //player_pos += rotate_vector_by_y_axis(.{-0.05, 0, 0}, player_yaw);
         }
         // make sure player's y component doesn't get affected by controller thumbstick
