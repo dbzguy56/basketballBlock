@@ -10,6 +10,11 @@
 
 Simp :: #import "Simp";
 
+#if OS == .WINDOWS {
+  #import "Windows";
+  OVR_Graphics_Luid :: LUID;
+  #library,system,link_always "Advapi32"; // needed by LibOVR
+}
 LibOVR :: #library,no_dll "../libovr/LibOVR/Lib/Windows/x64/Release/VS2017/LibOVR";
 
 OVR_Result :: s32;
@@ -163,11 +168,6 @@ ovr_success :: inline (result : OVR_Result) -> bool {
 
 ovr_failure :: inline (result : OVR_Result) -> bool {
     return !ovr_success(result);
-}
-
-#if OS == .WINDOWS {
-    #import "Windows";
-    OVR_Graphics_Luid :: LUID;
 }
 
 ovr_Create :: (session: *OVR_Session, luid: *OVR_Graphics_Luid) -> OVR_Result #foreign LibOVR;
@@ -1184,7 +1184,7 @@ main :: () {
 
         timewarp_projection_desc := OVR_Timewarp_Projection_Desc.{};
 
-        current_frame : float32 = xx get_time();
+        current_frame : float32 = xx seconds_since_init();
         delta_time = current_frame - last_frame;
         last_frame = current_frame;
         camera_speed := 2 * delta_time;
@@ -1326,7 +1326,7 @@ main :: () {
 
                 scale_factor2 := 0.1;
                 q : Quaternion;
-                set_from_axis_and_angle(*q, 1.0, 0.3, 0.5, deg_to_rad(xx (get_time() * 20)));
+                set_from_axis_and_angle(*q, 1.0, 0.3, 0.5, deg_to_rad(xx (seconds_since_init() * 20)));
                 m_rotate := rotation_matrix(Matrix4, q);
                 model2 := make_translation_matrix4(.{0, box_height, -0.5}) * m_rotate  * make_scale_matrix4(xyz(scale_factor2, scale_factor2, scale_factor2));
                 glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_TRUE, model2.floats.data);
